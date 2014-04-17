@@ -3228,6 +3228,8 @@ function condense( unmatched, map, filter, context, xml ) {
 			if ( !filter || filter( elem, context, xml ) ) {
 				newUnmatched.push( elem );
 				if ( mapped ) {
+					// 此处的map是记录未匹配的数组中数据项符合条件的下标值集合，
+					// 用于以后修正数据项使用
 					map.push( i );
 				}
 			}
@@ -3307,17 +3309,23 @@ function setMatcher( preFilter, selector, matcher, postFilter, postFinder, postS
     	//把matcherIn过滤出matcherOut
     	// 1、首先使用匹配器本身进行匹配
 		if ( matcher ) {
-			// 应用过滤器本身。符合过滤条件的返回给matchOut
+			// 应用过滤器本身。符合过滤条件的返回给matchOut，
+			// 这个通过matcher匹配的过程不是仅仅把符合条件的取出来，
+			// 同时还要在原集合中把符合条件的那一项设置为false，
+			// 这样在原集合中剩下的就是不符合条件
 			matcher( matcherIn, matcherOut, context, xml );
 		}
 
 		// Apply postFilter
 		//这个时候matcherOut对应的是规则“div:first ”找到的DOM节点
     	//接着从matcherOut中用后置规则“ input:checked + p”过滤！
-    	//先用postFilter过滤出候选集
+    	//先用postFilter过滤出候选集，后置过滤器，是紧跟着位置伪类的
+    	// 非层次选择符才会有，如果位置伪类后面紧跟着的是层次选择符
+    	// 则postFilter为false，不执行此处进行过滤
 		if ( postFilter ) {
 			// postMap存储的是符合条件的索引值数组
-			// 首先是矫正匹配出来的元素集合中的元素，存放早temp临时变量里面
+			// 首先是矫正匹配出来的元素集合中的元素，存放在temp临时变量里面
+			// 修正数组的索引值，同时存储matcherOut原数组中对应的索引值
 			temp = condense( matcherOut, postMap );
 			// 使用后置过滤器过滤矫正后的元素集合
 			postFilter( temp, [], context, xml );
@@ -3361,6 +3369,7 @@ function setMatcher( preFilter, selector, matcher, postFilter, postFinder, postS
 
 		// Add elements to results, through postFinder if defined
 		} else {
+			// 这一步是修正及去除matcherOut中不符合要求的数据项。
 			matcherOut = condense(
 				matcherOut === results ?
 					matcherOut.splice( preexisting, matcherOut.length ) :
@@ -3379,10 +3388,16 @@ function setMatcher( preFilter, selector, matcher, postFilter, postFinder, postS
 
 // 从选择符元素中创建匹配器
 // 返回的是一个setMatcher
+// 传入的是字符序列，返回的是setmatcher闭包过滤器
 function matcherFromTokens( tokens ) {
 	var checkContext, matcher, j,
 		len = tokens.length,
 		// 是否是四种节点关系中的一种
+		// 这里是在处理位置伪类后面的层次选择符使用的，用来确定层次关系
+		// 例如选择符为.first>ul:first > li:not(:first)
+		// 在.first>ul:first后面会进行另一次循环进行创建过滤器，则后面的表达式
+		// 再进行循环创建时选择符为 > li:not(:first),所以在此处确定相对关系为
+		// leadingRelative = {dir: "parentNode",first: true}
 		leadingRelative = Expr.relative[ tokens[0].type ],
 		// 默认是祖宗与后代的关系
 		implicitRelative = leadingRelative || Expr.relative[" "],
@@ -3402,6 +3417,7 @@ function matcherFromTokens( tokens ) {
 		}, implicitRelative, true ),
 		 //这里用来确定元素在哪个context
 		matchers = [ function Context1( elem, context, xml ) {
+			// 这里的上下文确定是通过上面的leadingRelative关系，如果是
 			return ( !leadingRelative && ( xml || context !== outermostContext ) ) || (
 				(checkContext = context).nodeType ?
 					matchContext( elem, context, xml ) :
@@ -3461,11 +3477,16 @@ function matcherFromTokens( tokens ) {
 
 					// 第4个参数，postFilter，后置过滤器，看是否有四个关系选择器，如果有四个关系选择器
 					// 第4个参数就是关系选择生成的匹配器，如果没有四种关系选择器，则此处的参数就是
-					// 剩下的所有选择符组成的集合
+					// 剩下的所有选择符组成的集合，含有后置过滤器的意思就是说位置伪类选择符后面紧跟的
+					// 还是属于对当前元素集合的过滤操作，过滤作用的主体还是经过位置伪类过滤后的集合
 					i < j && matcherFromTokens( tokens.slice( i, j ) ),
 
 					//第5个参数，postFinder，后置搜索器，相当于在前边过滤出来的集合里边再搜索剩下的规则的一个搜索器
 					// 如果关系选择器存在，则第五个参数就是关系选择器后面跟着的选择符生成的匹配器
+					// 如果一旦存在层次选择符，说明后面要进行操作的不再是经过前面位置伪类过滤后的元素集合了
+					// 而是通过层次关系移动节点关系层次的元素集合，相当于说，当前经过过滤后的集合为[a],
+					// 当前的层次关系为>(子类选择符),则需要通过a.children这样的关系选择出来子类的元素集合
+					// 这样就把层次关系移动到了子类的层次上。
 					j < len && matcherFromTokens( (tokens = tokens.slice( j )) ),
 
 					//第6个参数，postSelector，后置搜索器对应的选择器字符串，相当于“input:checked + p”
@@ -3484,6 +3505,7 @@ function matcherFromTokens( tokens ) {
 // 创建匹配器的入口点，最终的superMatcher
 function matcherFromGroupMatchers( elementMatchers, setMatchers ) {
 	// A counter to specify which element is currently being matched
+	// 只是当前被匹配的是哪个元素的计数器
 	var matcherCachedRuns = 0,
 		bySet = setMatchers.length > 0,
 		// 是否有匹配器可以进行匹配
@@ -3497,6 +3519,7 @@ function matcherFromGroupMatchers( elementMatchers, setMatchers ) {
 				matchedCount = 0,
 				i = "0",
 				unmatched = seed && [],
+				// 是否使用外层上下文
 				outermost = expandContext != null,
 				contextBackup = outermostContext,
 				// We must always have either seed elements or context
@@ -3505,8 +3528,11 @@ function matcherFromGroupMatchers( elementMatchers, setMatchers ) {
 				// 它会先执行Expr.find["TAG"]( "*", outermost )这句代码等到一个elems集合（数组合集）
 				// 可以看出对于优化选择器，最右边应该写一个作用域的搜索范围context比较好
 				// 有两种情况下会执行后面的find语句，有多个选择符以逗号分隔。就是有伪类选择符。
+				// 上下文表示如果选择符中包含有+~这两个层次选择符之一，说明接下来选择的元素是
+				// 当前上下文的兄弟节点，所以进行查找的话上下文要移动到parentNode上。
 				elems = seed || byElement && Expr.find["TAG"]( "*", expandContext && context.parentNode || context ),
 				// Use integer dirruns iff this is the outermost matcher
+				//　当且仅当这是最外层的匹配器的时候使用整数dirruns
 				dirrunsUnique = (dirruns += contextBackup == null ? 1 : Math.random() || 0.1);
 
 			if ( outermost ) {
@@ -3554,6 +3580,7 @@ function matcherFromGroupMatchers( elementMatchers, setMatchers ) {
 			}
 
 			// Apply set filters to unmatched elements
+			// 此处的i表示种子集合的长度
 			matchedCount += i;
 			if ( bySet && i !== matchedCount ) {
 				j = 0;
@@ -3563,6 +3590,7 @@ function matcherFromGroupMatchers( elementMatchers, setMatchers ) {
 
 				if ( seed ) {
 					// Reintegrate element matches to eliminate the need for sorting
+					// 整合不需要进行排序的匹配的元素
 					if ( matchedCount > 0 ) {
 						while ( i-- ) {
 							if ( !(unmatched[i] || setMatched[i]) ) {
@@ -3592,6 +3620,9 @@ function matcherFromGroupMatchers( elementMatchers, setMatchers ) {
 				outermostContext = contextBackup;
 			}
 
+			// 相对于正常情况下的选择符，返回unmatched集合也无妨
+			// 因为传递进来的数组results是引用类型，所以在compile方法中调用的
+			// 时候，调用superMathcer结束以后，results中已经保存了结果集
 			return unmatched;
 		};
 
