@@ -2340,6 +2340,9 @@ function createButtonPseudo( type ) {
 //用于创建位置伪类的过滤函数，它们是模拟从左向右的顺序进行选择，
 //匹配到它时的结果集的位置来挑选元素的
 //比如:odd,:even, :eq, :gt, :lt, :first, :last
+// 调用createPositionalPseudo方法，对于传入的两个参数
+// 第一个参数种子集合，第二个是匹配项数组
+// 调用完成之后种子集合中符合条件的项设置为false，matches数组中存放的就是匹配项
 function createPositionalPseudo( fn ) {
 	return markFunction(function PositionalPseudo1( argument ) {
 		argument = +argument;
@@ -2757,6 +2760,7 @@ Expr = Sizzle.selectors = {
 
 	pseudos: {
 		// Potentially complex pseudos
+		// 潜在的复杂伪类
 		"not": markFunction(function not1( selector ) {
 			// Trim the selector passed to compile
 			// to avoid treating leading and trailing
@@ -2923,6 +2927,7 @@ Expr = Sizzle.selectors = {
 		// 在初始化的时候，每个函数都已经被标记了
 		// 为了方便调试，匿名函数我都添加了一个名称
 		//"first": createPositionalPseudo(function() {
+		// createPositionalPseudo方法中嵌套的fn函数的参数为[],种子集合长度,伪类中的参数
 		"first": createPositionalPseudo(function first1() {
 			return [ 0 ];
 		}),
@@ -3120,6 +3125,8 @@ function toSelector( tokens ) {
 function addCombinator( matcher, combinator, base ) {
 	var dir = combinator.dir,
 		checkNonElements = base && dir === "parentNode",
+		// 局部变量就是为了保存这是第几次调用节点层次移动方法。
+		// 用于创建不同的元素节点缓存数组的第一个值
 		doneName = done++;
 
 	// 四个表示位置关系的有两个为first:true，表示关系最近的。分别是
@@ -3140,6 +3147,15 @@ function addCombinator( matcher, combinator, base ) {
 		// 检测所有的祖宗节点或者兄弟节点
 		function( elem, context, xml ) {
 			var data, cache, outerCache,
+				// 层次关系选择符在整个选择符中的位置为doneName，
+				// 该值相当于在DOM树中从上到下的层级位置。
+				// 组成的键值的意义为：
+				//                 	 div元素---------------------相当于层级0，doneName = 0
+				//				   /   		\
+				//				 div   		div -----------------相当于层级1，doneName = 1
+				//				/  \   		/  \
+				// 			   p   div     p   div---------------相当于层级2，doneName = 2
+				// 层级关系如上所示，每一层的节点元素的键值都是一样的。
 				dirkey = dirruns + " " + doneName;
 
 			// We can't set arbitrary data on XML nodes, so they don't benefit from dir caching
@@ -3178,6 +3194,16 @@ function addCombinator( matcher, combinator, base ) {
 								return data === true;
 							}
 						} else {
+							// 如果外部缓存中不存在元素，在这里进行遍历的时候，同时设置给元素设置一个标志
+							// 用来标志该元素是否是符合要求的元素节点
+							// 在元素的Sizzle-1.9834789237478属性中添加一个对象，该对象中包含一个数组
+							// 如果通过层次选择器移动了当前的节点层次，使用matcher比较当前的元素是否符合要求
+							// 如果符合要求，matcher返回为true，则此节点的标记属性中的数组第二项被设置为true
+							// 如果不符合要求，被设置为此元素在种子集合中的索引值。这样在下次此元素被遍历到的时候，
+							// 首先查看元素是否有标记，如果没有标记说明此元素没有被遍历过，处理元素
+							// 如果元素被标记了，而且标记数组的第二项为true，说明此元素复合要求，直接返回true
+							// 如果标记的第二项不为true，而是一个数字，说明此元素不符合要求，继续进行递归遍历
+							// 知道查找到符合要求的或者一直查找到元素的上下文。再确定是否符合要求。
 							cache = outerCache[ dir ] = [ dirkey ];
 							cache[1] = matcher( elem, context, xml ) || cachedruns;
 							if ( cache[1] === true ) {
@@ -3487,6 +3513,8 @@ function matcherFromTokens( tokens ) {
 					// 而是通过层次关系移动节点关系层次的元素集合，相当于说，当前经过过滤后的集合为[a],
 					// 当前的层次关系为>(子类选择符),则需要通过a.children这样的关系选择出来子类的元素集合
 					// 这样就把层次关系移动到了子类的层次上。
+					// **********************************************************************************
+					// 调用matcherFromTokens返回的是直接可以执行的匹配器，非超级匹配器
 					j < len && matcherFromTokens( (tokens = tokens.slice( j )) ),
 
 					//第6个参数，postSelector，后置搜索器对应的选择器字符串，相当于“input:checked + p”
@@ -3505,7 +3533,7 @@ function matcherFromTokens( tokens ) {
 // 创建匹配器的入口点，最终的superMatcher
 function matcherFromGroupMatchers( elementMatchers, setMatchers ) {
 	// A counter to specify which element is currently being matched
-	// 只是当前被匹配的是哪个元素的计数器
+	// 指示当前被匹配的是哪个元素的计数器
 	var matcherCachedRuns = 0,
 		bySet = setMatchers.length > 0,
 		// 是否有匹配器可以进行匹配
@@ -3536,6 +3564,8 @@ function matcherFromGroupMatchers( elementMatchers, setMatchers ) {
 				dirrunsUnique = (dirruns += contextBackup == null ? 1 : Math.random() || 0.1);
 
 			if ( outermost ) {
+				// 扩充上下文是在提供了上下文的基础上进行的，如果没有提供上下文，那么outmostContext
+				// 就为false，因为不提供上下文的情况下，默认提供的上下文是document
 				outermostContext = context !== document && context;
 				cachedruns = matcherCachedRuns;
 			}
