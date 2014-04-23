@@ -3155,7 +3155,7 @@ function addCombinator( matcher, combinator, base ) {
 				//				 div   		div -----------------相当于层级1，doneName = 1
 				//				/  \   		/  \
 				// 			   p   div     p   div---------------相当于层级2，doneName = 2
-				// 层级关系如上所示，每一层的节点元素的键值都是一样的。
+				// 层级关系如上所示，每一层的节点元素的标记数组的第一项键值都是一样的。
 				dirkey = dirruns + " " + doneName;
 
 			// We can't set arbitrary data on XML nodes, so they don't benefit from dir caching
@@ -3188,8 +3188,17 @@ function addCombinator( matcher, combinator, base ) {
 					// 对传递进来的元素进行了某一个维度上的深度遍历后，
 					// 检查得到的元素是不是元素节点。如果不是元素节点继续在这个维度上进行遍历
 					if ( elem.nodeType === 1 || checkNonElements ) {
+						// 首先检查元素是否含有标记，如果没有标记，设置一个标记对象
 						outerCache = elem[ expando ] || (elem[ expando ] = {});
+						// 检查标记对象的parentNode/previousSibling属性中是否含有一个数组对象
+						// 数组对象的第一项是所在层级位置组成的键值key，第二项是元素节点是否
+						// 符合要求的标志，如果为true表示符合要求，如果为数字，表示不符合要求
+						// 数字为该元素在种子集合中的位置索引。
 						if ( (cache = outerCache[ dir ]) && cache[0] === dirkey ) {
+							// 如果元素已经含有标记属性对象，而且标记数组的第二项为true
+							// 表示此元素已经进行了匹配，而且符合条件，那么种子集合中的
+							// 该元素也符合要求，直接返回true。或者第二项不等于true，
+							// 继续循环遍历元素节点。
 							if ( (data = cache[1]) === true || data === cachedruns ) {
 								return data === true;
 							}
@@ -3205,7 +3214,9 @@ function addCombinator( matcher, combinator, base ) {
 							// 如果标记的第二项不为true，而是一个数字，说明此元素不符合要求，继续进行递归遍历
 							// 知道查找到符合要求的或者一直查找到元素的上下文。再确定是否符合要求。
 							cache = outerCache[ dir ] = [ dirkey ];
+							// 设置标记数组第二项
 							cache[1] = matcher( elem, context, xml ) || cachedruns;
+							// 如果第二项不等于true，继续进行循环遍历
 							if ( cache[1] === true ) {
 								return true;
 							}
