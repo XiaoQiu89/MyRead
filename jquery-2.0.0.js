@@ -3407,7 +3407,6 @@ function setMatcher( preFilter, selector, matcher, postFilter, postFinder, postS
 		// Add elements to results, through postFinder if defined
 		} else {
 			// 这一步是修正及去除matcherOut中不符合要求的数据项。
-			// 
 			matcherOut = condense(
 				matcherOut === results ?
 					matcherOut.splice( preexisting, matcherOut.length ) :
@@ -3455,15 +3454,8 @@ function matcherFromTokens( tokens ) {
 		}, implicitRelative, true ),
 		 //这里用来确定元素在哪个context
 		matchers = [ function Context1( elem, context, xml ) {
-			// 这里的上下文确定是通过上面的leadingRelative关系，如果上下文context没有进行设置
-			// 那么默认就是document，则outermostContext = false,所以此处返回true，而不会进入到
-			// 上下文的过滤操作中。因为页面上所有的元素的最终根节点肯定是document，所以不需要进行
-			// 过滤操作，而如果在前面设置了上下文context，那么此处的context就是一个元素节点，
-			// 同时outmostContext与context相同，所以会继续执行后面的macthContext操作。
+			// 这里的上下文确定是通过上面的leadingRelative关系，如果是
 			return ( !leadingRelative && ( xml || context !== outermostContext ) ) || (
-				// 这里的操作时在设置了上下文的基础上进行的，如果不设置上下文context，代码不会执行到这里。
-				// 如果context上下文没有nodeType属性，说明context上下文是一个元素集合，使用matchAnyContext
-				// 进行过滤，如果context含有NodeType属性，则使用matchContext进行过滤操作。
 				(checkContext = context).nodeType ?
 					matchContext( elem, context, xml ) :
 					matchAnyContext( elem, context, xml ) );
@@ -3550,7 +3542,6 @@ function matcherFromTokens( tokens ) {
 }
 
 // 创建匹配器的入口点，最终的superMatcher
-// 超级匹配器最终返回的是未匹配的元素集合
 function matcherFromGroupMatchers( elementMatchers, setMatchers ) {
 	// A counter to specify which element is currently being matched
 	// 指示当前被匹配的是哪个元素的计数器
@@ -3610,7 +3601,6 @@ function matcherFromGroupMatchers( elementMatchers, setMatchers ) {
 					}
 					if ( outermost ) {
 						dirruns = dirrunsUnique;
-						// 节点元素的位置索引值逐渐变化
 						cachedruns = ++matcherCachedRuns;
 					}
 				}
@@ -3624,9 +3614,7 @@ function matcherFromGroupMatchers( elementMatchers, setMatchers ) {
 					}
 
 					// Lengthen the array for every element, matched or not
-					// 延长数组中的每个元素
 					if ( seed ) {
-						//重新组装成一个新的过滤集合，种子集合中不进行改动
 						unmatched.push( elem );
 					}
 				}
@@ -3653,7 +3641,6 @@ function matcherFromGroupMatchers( elementMatchers, setMatchers ) {
 					}
 
 					// Discard index placeholder values to get only actual matches
-					// 丢弃数组中的标记占位符false，获取真正的匹配元素
 					setMatched = condense( setMatched );
 				}
 
@@ -3669,7 +3656,6 @@ function matcherFromGroupMatchers( elementMatchers, setMatchers ) {
 			}
 
 			// Override manipulation of globals by nested matchers
-			// 因为这两个都是全局变量，所以在过滤结束以后使用最里层的匹配参数覆盖这两个变量
 			if ( outermost ) {
 				dirruns = dirrunsUnique;
 				outermostContext = contextBackup;
@@ -3678,8 +3664,6 @@ function matcherFromGroupMatchers( elementMatchers, setMatchers ) {
 			// 相对于正常情况下的选择符，返回unmatched集合也无妨
 			// 因为传递进来的数组results是引用类型，所以在compile方法中调用的
 			// 时候，调用superMathcer结束以后，results中已经保存了结果集
-			// 不匹配的数组中包含不符合要求的项，匹配的项的位置使用false占位符
-			// 表明剩下的项都是非匹配项。
 			return unmatched;
 		};
 
