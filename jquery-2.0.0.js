@@ -2344,6 +2344,7 @@ function createButtonPseudo( type ) {
 // 第一个参数种子集合，第二个是匹配项数组
 // 调用完成之后种子集合中符合条件的项设置为false，matches数组中存放的就是匹配项
 function createPositionalPseudo( fn ) {
+	// 对数组查询的抽象
 	return markFunction(function PositionalPseudo1( argument ) {
 		argument = +argument;
 		return markFunction(function PositionalPseudo2( seed, matches ) {
@@ -2933,12 +2934,14 @@ Expr = Sizzle.selectors = {
 		}),
 
 		//"last": createPositionalPseudo(function( matchIndexes, length ) {
+		// 函数curry化是为了更好的复用	
 		"last": createPositionalPseudo(function last1( matchIndexes, length ) {
 			return [ length - 1 ];
 		}),
 
 		//"eq": createPositionalPseudo(function( matchIndexes, length, argument ) {
 		"eq": createPositionalPseudo(function eq1( matchIndexes, length, argument ) {
+			// eq的参数是个大于-length小于length的整数
 			return [ argument < 0 ? argument + length : argument ];
 		}),
 
@@ -3407,6 +3410,7 @@ function setMatcher( preFilter, selector, matcher, postFilter, postFinder, postS
 		// Add elements to results, through postFinder if defined
 		} else {
 			// 这一步是修正及去除matcherOut中不符合要求的数据项。
+			// 
 			matcherOut = condense(
 				matcherOut === results ?
 					matcherOut.splice( preexisting, matcherOut.length ) :
@@ -3454,8 +3458,15 @@ function matcherFromTokens( tokens ) {
 		}, implicitRelative, true ),
 		 //这里用来确定元素在哪个context
 		matchers = [ function Context1( elem, context, xml ) {
-			// 这里的上下文确定是通过上面的leadingRelative关系，如果是
+			// 这里的上下文确定是通过上面的leadingRelative关系，如果上下文context没有进行设置
+			// 那么默认就是document，则outermostContext = false,所以此处返回true，而不会进入到
+			// 上下文的过滤操作中。因为页面上所有的元素的最终根节点肯定是document，所以不需要进行
+			// 过滤操作，而如果在前面设置了上下文context，那么此处的context就是一个元素节点，
+			// 同时outmostContext与context相同，所以会继续执行后面的macthContext操作。
 			return ( !leadingRelative && ( xml || context !== outermostContext ) ) || (
+				// 这里的操作时在设置了上下文的基础上进行的，如果不设置上下文context，代码不会执行到这里。
+				// 如果context上下文没有nodeType属性，说明context上下文是一个元素集合，使用matchAnyContext
+				// 进行过滤，如果context含有NodeType属性，则使用matchContext进行过滤操作。
 				(checkContext = context).nodeType ?
 					matchContext( elem, context, xml ) :
 					matchAnyContext( elem, context, xml ) );
@@ -3542,6 +3553,7 @@ function matcherFromTokens( tokens ) {
 }
 
 // 创建匹配器的入口点，最终的superMatcher
+// 超级匹配器最终返回的是未匹配的元素集合
 function matcherFromGroupMatchers( elementMatchers, setMatchers ) {
 	// A counter to specify which element is currently being matched
 	// 指示当前被匹配的是哪个元素的计数器
@@ -3601,6 +3613,7 @@ function matcherFromGroupMatchers( elementMatchers, setMatchers ) {
 					}
 					if ( outermost ) {
 						dirruns = dirrunsUnique;
+						// 节点元素的位置索引值逐渐变化
 						cachedruns = ++matcherCachedRuns;
 					}
 				}
@@ -3614,7 +3627,9 @@ function matcherFromGroupMatchers( elementMatchers, setMatchers ) {
 					}
 
 					// Lengthen the array for every element, matched or not
+					// 延长数组中的每个元素
 					if ( seed ) {
+						//重新组装成一个新的过滤集合，种子集合中不进行改动
 						unmatched.push( elem );
 					}
 				}
@@ -3641,6 +3656,7 @@ function matcherFromGroupMatchers( elementMatchers, setMatchers ) {
 					}
 
 					// Discard index placeholder values to get only actual matches
+					// 丢弃数组中的标记占位符false，获取真正的匹配元素
 					setMatched = condense( setMatched );
 				}
 
@@ -3656,6 +3672,7 @@ function matcherFromGroupMatchers( elementMatchers, setMatchers ) {
 			}
 
 			// Override manipulation of globals by nested matchers
+			// 因为这两个都是全局变量，所以在过滤结束以后使用最里层的匹配参数覆盖这两个变量
 			if ( outermost ) {
 				dirruns = dirrunsUnique;
 				outermostContext = contextBackup;
@@ -3664,6 +3681,8 @@ function matcherFromGroupMatchers( elementMatchers, setMatchers ) {
 			// 相对于正常情况下的选择符，返回unmatched集合也无妨
 			// 因为传递进来的数组results是引用类型，所以在compile方法中调用的
 			// 时候，调用superMathcer结束以后，results中已经保存了结果集
+			// 不匹配的数组中包含不符合要求的项，匹配的项的位置使用false占位符
+			// 表明剩下的项都是非匹配项。
 			return unmatched;
 		};
 
@@ -3971,27 +3990,39 @@ jQuery.Callbacks = function( options ) {
 		//默认值为false，表示此函数列表还没有触发过，一旦此函数列表触发过了，将有两种可能的情况：  
         //如果flags.once=true，那么memory=true，以后在fire时，一发现memory=true,将什么也不做  
         //如果flags.memory=true,那么memory=[context , args]  
-		memory,
+		memory, //用于记录是否保存已经执行了回调的这种记忆
 		// Flag to know if list was already fired
-		fired,
+		fired, // 标示是否已经触发过了回调队列
 		// Flag to know if list is currently firing
-		firing,
+		firing, // 标示回调队列是否正在被触发执行
 		// First callback to fire (used internally by add and fireWith)
-		firingStart,
+		firingStart, // 第一次触发的时候设置开始的位置
 		// End of the loop when firing
-		firingLength,
+		firingLength, // 回调队列的长度
 		// Index of currently firing callback (modified by remove if needed)
-		firingIndex,
-		// Actual callback list
+		firingIndex, // 现在已经触发的位置，对于后来添加进来的回调，从当前位置执行，不在执行以前已经执行过的
+		// Actual callback list // 回到队列
+		// 这个数组是回调队列的核心，所有的回调函数都存放在此数组中。
 		list = [],
 		// Stack of fire calls for repeatable lists
 		// 如果是'once'的方式，stack为undefined，所以在执行完fire后，关闭list列表，不在提供回调触发
 		//如果flags.once=true，那么当你调用fire时，而且这时上一轮的fire还没有执行完毕，这时候将会把 [context , args]入栈  
-        //然后等上一次fire完结后，它会继续判断stack里边是否还有值，有的话会拿出[context , args]再次执行所有的函数列表  
+        //然后等上一次fire完结后，它会继续判断stack里边是否还有值，有的话会拿出[context , args]再次执行所有的函数列表 
+        // 如果不是once的方式只执行一次，其他的方式会保存上下文和参数值。 
+        // once方式表示当前回调队列中的回调仅仅执行一次，而memory方式则是则是拥有执行记忆功能
+        // 即执行完当前队列中的回调后，后面添加的回调会自动触发调用，参数为上一次触发使用的参数。
+        // 如果同时添加once和memory两种方式，那么效果进行叠加，即添加的回调执行完就进行清空，
+        // 后面添加的回调自动执行，执行完以后再次清空队列。
+        // stack缓存参数信息，如果stack中还有数据，说明还有未执行完的调用。
 		stack = !options.once && [],
 		// Fire callbacks
+		// 调用fire方法传递进来的参数是一个数组，第一项为上下文对象，第二项为参数调用回调函数的参数
+		// 但是对于外界开放的接口只有fireWith方法，在fireWith方法中对于传递进来的回调参数已经
+		// 进行了处理，把当前调用函数的上下文对象包装进了数组中，再直接调用fire方法。
 		fire = function( data ) {
 			// 如果该回调队列被设置为memory，则记录传递进来的data
+			// data的数据是上下文和传递进来的参数
+			// memory方式只有通过fire方法触发一次以后才会有效
 			memory = options.memory && data;
 			// 设置标记，表示已经触发了回调
 			fired = true;
@@ -4020,9 +4051,10 @@ jQuery.Callbacks = function( options ) {
 			// 如果列表存在
 			//当触发执行完毕后，还要检查一下stack的情况，处理flags.once=false,并且调用了多次的fire()  
 			if ( list ) {
-				// 如果堆栈存在。如果是使用once方式，stack栈为undefined。
+				// 如果堆栈不存在。如果是使用once方式，stack栈为undefined。
 				// Deferred模块的延迟体现在这个地方，使用once和memory。
 				// 因为是once，所以stack为undefined，跳过此处执行else if语句
+				// 只要没有设置once方式，stack就不会为undefined。也就不会取消回调队列
 				if ( stack ) {
 					// 如果堆栈不为空
 					if ( stack.length ) {
@@ -4059,6 +4091,8 @@ jQuery.Callbacks = function( options ) {
 							var type = jQuery.type( arg );
 							//如果所传参数为函数，则push
 							if ( type === "function" ) {
+								// 此处通过设置参数unique保证回调队列中没有重复项
+								// 如果设置了unique属性，而且必须保证在list队列中没有包含此函数项
 								if ( !options.unique || !self.has( arg ) ) {
 									list.push( arg );
 								}
@@ -4182,6 +4216,10 @@ jQuery.Callbacks = function( options ) {
 			fired: function() {
 				return !!fired;
 			}
+			// 为了查看回调列表，我自己添加了一个查看list的方法。
+			,look : function(){
+				return list;
+			}
 		};
 
 	return self;
@@ -4262,6 +4300,9 @@ jQuery.extend({
 					// 而全局的deferred对象中保存的是传递进来的参数，如果要对传递进来的原始参数进行操作，
 					// 可以使用手动创建的deferred对象。
 					return jQuery.Deferred(function( newDefer ) {
+						// 这里的tuples是外层的deferred对象的。新创建的newDefer对象在此次调用中不使用
+						// 在下一次调用then方法的时候使用。就是这样吧回调方法挂载在上一层的promise对象上
+						// 实现回调链的连接。
 						jQuery.each( tuples, function( i, tuple ) {
 							var action = tuple[ 0 ],
 								// 此处的fns是通过闭包引用的参数arguments。
@@ -4287,6 +4328,10 @@ jQuery.extend({
 								} else {
 									// 此处调用resolveWith方法触发的是通过上面的jQuery.Deferred(function(){})
 									// 创建的一个新的deferred对象的方法。
+									// 参数通过[return]形式传递给挂载在下一个deferred对象上的回调函数中。
+									// 这里的第一个参数是确定上下文的作用。因为当执行回调的时候，当前的作用域是
+									// 在当前的promise对象，所以在调用then方法中的下一个回调的时候，需要检测
+									// 当前对象是否是调用对象，如果是需要把上下文对象进行转换，转换成下一个调用上下文。
 									newDefer[ action + "With" ]( this === promise ? newDefer.promise() : this, fn ? [ returned ] : arguments );
 								}
 							});
@@ -4371,6 +4416,9 @@ jQuery.extend({
 			};
 			// 直接调用回调队列的fireWith方法，可以传递自己的上下文与参数
 			deferred[ tuple[0] + "With" ] = list.fireWith;
+
+			// 添加的查看回调队列的方法，测试使用
+			deferred["look"] = list.look;
 		});
 
 		// Make the deferred a promise
@@ -4398,6 +4446,10 @@ jQuery.extend({
     // 但我测试回调的done或fail是以第一个函数为准的，也就是说如果它为resolve，
     // 那么回调会进入done，否则则进入fail，还有待观察
     // when方法中传递的参数一般都会当做回调函数的参数数组
+
+    // 在某些情况下，我们需要获得多个返回结果后，再继续执行应用程序
+    //（例如，在用户可以选择他们感兴趣的选项前，显示一组动态的选项）。这种情况下，
+    // 'when'方法可以用来解决所有的promise都满足后才能继续执行的场景。
     */
 	when: function( subordinate /* , ..., subordinateN */ ) {
 		var i = 0,
@@ -4405,19 +4457,30 @@ jQuery.extend({
 			length = resolveValues.length,
 
 			// the count of uncompleted subordinates
+			// 如果when的列表中只有一个deferred对象，那么不需要再重新创建一个deferred对象进行封装
+			// 如果含有多个deferred对象，则重新创建一个deferred对象。在创建的更新函数中持有新创建的deferred
+			// 对象的引用。而且是把这个更新函数添加到传递进来的所有的deferred对象的done回调队列中。
+			// 这样每个deferred对象都会执行更新方法检查标志remaining是否已经置0，置0表示所有的外部
+			// deferred对象的done回调队列中的回调执行完毕。当一个deferred对象的回调队列执行完毕后
+			// 就把标志位remaining减去1.这样通过remaining的标志位就可以检查所有的任务是否都已经执行完毕了。
 			remaining = length !== 1 || ( subordinate && jQuery.isFunction( subordinate.promise ) ) ? length : 0,
 
 			// the master Deferred. If resolveValues consist of only a single Deferred, just use that.
 			deferred = remaining === 1 ? subordinate : jQuery.Deferred(),
 
 			// Update function for both resolve and progress values
+			// 对于resolve的更新函数，此函数中持有when方法创建出来的新的deferred对象。
+			// 
 			updateFunc = function( i, contexts, values ) {
 				return function( value ) {
+					// 此时的this表示当前调用的deferred的一部分promise对象
 					contexts[ i ] = this;
+					// 把调用回调方法的参数传递进来
 					values[ i ] = arguments.length > 1 ? core_slice.call( arguments ) : value;
 					if( values === progressValues ) {
 						deferred.notifyWith( contexts, values );
 					} else if ( !( --remaining ) ) {
+						// 把所有的参数组成数组传递给最终的回调队列。
 						deferred.resolveWith( contexts, values );
 					}
 				};
@@ -4432,6 +4495,7 @@ jQuery.extend({
 			resolveContexts = new Array( length );
 			for ( ; i < length; i++ ) {
 				if ( resolveValues[ i ] && jQuery.isFunction( resolveValues[ i ].promise ) ) {
+					// 给每个传递进来的deferred对象添加新创建的更新函数。
 					resolveValues[ i ].promise()
 						.done( updateFunc( i, resolveContexts, resolveValues ) )
 						.fail( deferred.reject )
@@ -4443,6 +4507,7 @@ jQuery.extend({
 		}
 
 		// if we're not waiting on anything, resolve the master
+		// 如果没有在等待的deferred对象，直接触发执行回调队列。
 		if ( !remaining ) {
 			deferred.resolveWith( resolveContexts, resolveValues );
 		}
